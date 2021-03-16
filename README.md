@@ -1,2 +1,2 @@
-# VTC
-API Tests for SDDC Grouping
+# VTC API tests for SDDC Grouping
+rename the config copy.ini to config.ini and insert your credentials
