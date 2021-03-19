@@ -25,6 +25,12 @@ config.read("./config.ini")
 BaseURL         = config.get("vmcConfig", "BaseURL")
 API_Token       = config.get("vmcConfig", "API_Token")
 org_id          = config.get("vmcConfig", "org_id")
+aws_acc         = config.get("vmcConfig", "MyAWS")
+region          = config.get("vmcConfig", "AWS_region")
+
+
+
+
 
 
 def getAccessToken(myKey):
@@ -74,6 +80,8 @@ def create_sddc_group(name, deployment_id, org_id, session_token):
     }
     response = requests.post(myURL, json=body, headers=myHeader)
     json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
     task_id = json_response ['operation_id']
     return task_id 
 
@@ -82,6 +90,8 @@ def get_deployments(org_id, session_token):
     myURL = "{}/inventory/{}/core/deployments".format(BaseURL, org_id)
     response = requests.get(myURL, headers=myHeader)
     json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
     if (json_response['empty'] == True):
         print("\n=====No SDDC found=========")
     else:  
@@ -94,6 +104,8 @@ def get_deployment_id(sddc, org_id, session_token):
     myURL = "{}/inventory/{}/core/deployments".format(BaseURL, org_id)
     response = requests.get(myURL, headers=myHeader)
     json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
     deployment_id = json_response['content'][int(sddc)-1]['id']
     return deployment_id
 
@@ -110,6 +122,8 @@ def get_sddc_groups(org_id, session_token):
     myURL = "{}/inventory/{}/core/deployment-groups".format(BaseURL, org_id)
     response = requests.get(myURL, headers=myHeader)
     json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
     if (json_response['empty'] == True):
         print("     No SDDC Group found\n")
     else:  
@@ -117,11 +131,21 @@ def get_sddc_groups(org_id, session_token):
             print(str(i+1) + ": " + json_response['content'][i]['name'] + ": " + json_response['content'][i]['id'])
     return
 
-def get_group_info(group_id, org_id, session_token):
+def get_group_info(group_id, resource_id, org_id, session_token):
     myHeader = {'csp-auth-token': session_token}
+    myURL = "{}/network/{}/core/network-connectivity-configs/{}/?trait=AwsNetworkConnectivityTrait".format(BaseURL, org_id, resource_id)
+    response = requests.get(myURL, headers=myHeader)
+    json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data) 
+    print("TGW_ID    : " + json_response['traits']['AwsNetworkConnectivityTrait']['l3connectors'][0]['id'])
+    print("Region    : " + json_response['traits']['AwsNetworkConnectivityTrait']['l3connectors'][0]['region'])
+
     myURL = "{}/inventory/{}/core/deployment-groups/{}".format(BaseURL, org_id, group_id)
     response = requests.get(myURL, headers=myHeader)
     json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data) 
     print("Group Name: " + json_response['name'])
     print("Group ID  : " + json_response['id'])
     for i in range(len(json_response['membership']['included'])):
@@ -132,7 +156,9 @@ def get_resource_id(group_id, org_id, session_token):
     myHeader = {'csp-auth-token': session_token}
     myURL = "{}/network/{}/core/network-connectivity-configs/?group_id={}".format(BaseURL, org_id, group_id)
     response = requests.get(myURL, headers=myHeader)
-    json_response = response.json()   
+    json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)    
     resource_id = json_response[0]['id']
     return resource_id
 
@@ -155,6 +181,8 @@ def remove_sddc(deployment_id, resource_id, org_id, session_token):
     }
     response = requests.post(myURL, json=body, headers=myHeader)
     json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
     task_id = json_response ['config']['operation_id']
     return task_id 
 
@@ -177,6 +205,8 @@ def attach_sddc(deployment_id, resource_id, org_id, session_token):
     }
     response = requests.post(myURL, json=body, headers=myHeader)
     json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
     task_id = json_response ['config']['operation_id']
     return task_id  
 
@@ -204,7 +234,143 @@ def delete_sddc_group(resource_id, org_id, session_token):
     response = requests.post(myURL, json=body, headers=myHeader)
     json_response = response.json()
     task_id = json_response ['id']
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
     return task_id        
+
+def connect_aws_account(account, region, resource_id, org_id, session_token):
+    myHeader = {'csp-auth-token': session_token}
+    myURL = "{}/network/{}/aws/operations".format(BaseURL, org_id)
+    body = {
+    "type": "ADD_EXTERNAL_ACCOUNT",
+    "resource_id": resource_id,
+    "resource_type": "network-connectivity-config",
+    "config" : {
+            "type": "AwsAddExternalAccountConfig",
+            "account" : {
+                "account_number": account,
+                "regions" : [region],
+                "auto_approval": "true"
+            }
+        }
+    }
+    response = requests.post(myURL, json=body, headers=myHeader)  
+    json_response = response.json()
+    task_id = json_response ['id']
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
+    return task_id    
+
+def get_pending_att(resource_id, org_id, session_token):
+    myHeader = {'csp-auth-token': session_token}
+    myURL = "{}/network/{}/core/network-connectivity-configs/{}?trait=AwsVpcAttachmentsTrait".format(BaseURL, org_id, resource_id)
+    response = requests.get(myURL, headers=myHeader)
+    json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data) 
+    vpcs=[]
+    n=1
+    for i in range(len(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'])):
+        print("Account: " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['account_number'])
+        for j in range(len(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'])):
+            if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'][int(j)]['state'] == "PENDING_ACCEPTANCE":
+                print(str(n) +": " + "VPC attachment = " + str(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'][int(j)]['attach_id']))
+                vpcs.append(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'][int(j)]['attach_id'])  
+                n=n+1  
+    return vpcs    
+
+def attach_vpc(att_id, resource_id, org_id, account, session_token):
+    myHeader = {'csp-auth-token': session_token}
+    myURL = "{}/network/{}/aws/operations".format(BaseURL, org_id)
+    body = {
+    "type": "APPLY_ATTACHMENT_ACTION",
+    "resource_id": resource_id,
+    "resource_type": "network-connectivity-config",
+    "config" : {
+            "type": "AwsApplyAttachmentActionConfig",
+            "account" : {
+                "account_number": account,
+                "attachments": [
+                    {
+                        "action": "ACCEPT",
+                        "attach_id": att_id
+                    }
+                ]
+            }
+        }
+    }
+    response = requests.post(myURL, json=body, headers=myHeader)  
+    json_response = response.json()
+    task_id = json_response ['id']
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
+    return task_id    
+
+def get_available_att(resource_id, org_id, session_token):
+    myHeader = {'csp-auth-token': session_token}
+    myURL = "{}/network/{}/core/network-connectivity-configs/{}?trait=AwsVpcAttachmentsTrait".format(BaseURL, org_id, resource_id)
+    response = requests.get(myURL, headers=myHeader)
+    json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data) 
+    vpcs=[]
+    n=1
+    for i in range(len(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'])):
+        print("Account: " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['account_number'])
+        for j in range(len(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'])):
+            if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'][int(j)]['state'] == "AVAILABLE":
+                print(str(n) +": " + "VPC attachment = " + str(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'][int(j)]['attach_id']))
+                vpcs.append(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'][int(j)]['attach_id']) 
+                n=n+1   
+    return vpcs      
+
+def detach_vpc(att_id, resource_id, org_id, account, session_token):
+    myHeader = {'csp-auth-token': session_token}
+    myURL = "{}/network/{}/aws/operations".format(BaseURL, org_id)
+    body = {
+    "type": "APPLY_ATTACHMENT_ACTION",
+    "resource_id": resource_id,
+    "resource_type": "network-connectivity-config",
+    "config" : {
+            "type": "AwsApplyAttachmentActionConfig",
+            "account" : {
+                "account_number": account,
+                "attachments": [
+                    {
+                        "action": "DELETE",
+                        "attach_id": att_id
+                    }
+                ]
+            }
+        }
+    }
+    response = requests.post(myURL, json=body, headers=myHeader)  
+    json_response = response.json()
+    task_id = json_response ['id']
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
+    return task_id    
+
+def disconnect_aws_account(account, region, resource_id, org_id, session_token):
+    myHeader = {'csp-auth-token': session_token}
+    myURL = "{}/network/{}/aws/operations".format(BaseURL, org_id)
+    body = {
+    "type": "REMOVE_EXTERNAL_ACCOUNT",
+    "resource_id": resource_id,
+    "resource_type": "network-connectivity-config",
+    "config" : {
+            "type": "AwsRemoveExternalAccountConfig",
+            "account" : {
+                "account_number": account
+            }
+        }
+    }
+    response = requests.post(myURL, json=body, headers=myHeader)  
+    json_response = response.json()
+    task_id = json_response ['id']
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
+    return task_id       
 
 # --------------------------------------------
 # ---------------- Main ----------------------
@@ -250,7 +416,9 @@ elif intent_name == "get-group-info":
     get_sddc_groups( org_id, session_token)
     group = input('   Select SDDC Group: ')
     group_id = get_group_id(group, org_id, session_token)
-    get_group_info(group_id, org_id, session_token)  
+    resource_id = get_resource_id(group_id, org_id, session_token)
+
+    get_group_info(group_id, resource_id, org_id, session_token)  
 
 elif intent_name == "attach-sddc":
     print("===== Connecting SDDC =========")
@@ -280,21 +448,80 @@ elif intent_name == "get-sddc-info":
     print("===== SDDC Info =========")
     get_deployments(org_id, session_token)
 
-elif intent_name == "get-group-info":
-    print("===== SDDC Group info =========")
+elif intent_name == "connect-aws":
+    print("=====Connecting AWS account=========")
     get_sddc_groups( org_id, session_token)
     group = input('   Select SDDC Group: ')
     group_id = get_group_id(group, org_id, session_token)
-    get_group_info(group_id, org_id, session_token)    
+    resource_id = get_resource_id(group_id, org_id, session_token)
+    task_id = connect_aws_account(aws_acc, region, resource_id, org_id, session_token)     
+    get_task_status(task_id, org_id, session_token)  
+
+elif intent_name == "attach-vpc":
+    print("=====Attaching VPCs=========")
+    get_sddc_groups( org_id, session_token)
+    group = input('   Select SDDC Group: ')
+    group_id = get_group_id(group, org_id, session_token)    
+    resource_id = get_resource_id(group_id, org_id, session_token)
+    vpc_list = get_pending_att(resource_id, org_id, session_token)
+    if vpc_list == []:
+        print('   No VPC to attach')
+    else:    
+        n = input('   Select VPC to attach: ')
+        task_id = attach_vpc(vpc_list[int(n)-1], resource_id, org_id, aws_acc, session_token)   
+        get_task_status(task_id, org_id, session_token)      
+
+elif intent_name == "detach-vpc":
+    print("=====Detaching VPCs=========")
+    get_sddc_groups( org_id, session_token)
+    group = input('   Select SDDC Group: ')
+    group_id = get_group_id(group, org_id, session_token)    
+    resource_id = get_resource_id(group_id, org_id, session_token)
+    vpc_list = get_available_att(resource_id, org_id, session_token)
+    if vpc_list == []:
+        print('   No VPC to detach')
+    else:    
+        n = input('  Select VPC to detach: ')
+        # print(vpc_list[int(n)-1])
+        task_id = detach_vpc(vpc_list[int(n)-1], resource_id, org_id, aws_acc, session_token)   
+        get_task_status(task_id, org_id, session_token)  
+
+elif intent_name == "disconnect-aws":
+    print("===== Disconnecting AWS account =========")
+    get_sddc_groups( org_id, session_token)
+    group = input('   Select SDDC Group: ')
+    group_id = get_group_id(group, org_id, session_token)
+    resource_id = get_resource_id(group_id, org_id, session_token)
+    task_id = disconnect_aws_account(aws_acc, region, resource_id, org_id, session_token)     
+    get_task_status(task_id, org_id, session_token)         
 
 else:
     print("\nPlease give an argument like:")
+    print("\nSDDC-Group Operations:")
     print("    create-sddc-group [name]")
     print("    delete-sddc-group")
     print("    get-group-info\n")
+    print("SDDC Operations:")
     print("    get-sddc-info")
     print("    attach-sddc")
     print("    detach-sddc \n")
+    print("AWS Operations:")
+    print("    connect-aws")
+    print("    attach-vpc")
+    print("    detach-vpc")
+    print("    disconnect-aws\n")
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
