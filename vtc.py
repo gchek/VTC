@@ -6,11 +6,15 @@ CSP API documentation is available at https://saas.csp.vmware.com/csp/gateway-do
 vCenter API documentation is available at https://code.vmware.coms/191/vsphere-automation
 
 
-You can install python 3.6 from https://www.python.org/downloads/windows/
+You can install python 3.9 from https://www.python.org/downloads/windows/
 
 You can install the dependent python packages locally (handy for Lambda) with:
 pip install requests -t . --upgrade
 pip install configparser -t . --upgrade
+
+OR
+
+use pip install -r requirements.txt
 
 """
 
@@ -133,23 +137,64 @@ def get_sddc_groups(org_id, session_token):
 
 def get_group_info(group_id, resource_id, org_id, session_token):
     myHeader = {'csp-auth-token': session_token}
-    myURL = "{}/network/{}/core/network-connectivity-configs/{}/?trait=AwsNetworkConnectivityTrait".format(BaseURL, org_id, resource_id)
-    response = requests.get(myURL, headers=myHeader)
-    json_response = response.json()
-    # pretty_data = json.dumps(response.json(), indent=4)
-    # print(pretty_data) 
-    print("TGW_ID    : " + json_response['traits']['AwsNetworkConnectivityTrait']['l3connectors'][0]['id'])
-    print("Region    : " + json_response['traits']['AwsNetworkConnectivityTrait']['l3connectors'][0]['region'])
 
     myURL = "{}/inventory/{}/core/deployment-groups/{}".format(BaseURL, org_id, group_id)
     response = requests.get(myURL, headers=myHeader)
     json_response = response.json()
     # pretty_data = json.dumps(response.json(), indent=4)
     # print(pretty_data) 
-    print("Group Name: " + json_response['name'])
-    print("Group ID  : " + json_response['id'])
-    for i in range(len(json_response['membership']['included'])):
-        print("Member    : " + json_response['membership']['included'][i]['deployment_id'])
+    print("\nORG ID      : " + json_response['org_id'])
+    print("SDDC Group")
+    print("==========")
+    print("    Name      : " + json_response['name'])
+    print("    Group ID  : " + json_response['id'])
+    print("    Creator   : " + json_response['creator']['user_name'])
+    print("    Date/Time : " + json_response['creator']['timestamp'])
+
+    myURL = "{}/network/{}/core/network-connectivity-configs/{}/?trait=AwsVpcAttachmentsTrait,AwsRealizedSddcConnectivityTrait,AwsDirectConnectGatewayAssociationsTrait,AwsNetworkConnectivityTrait".format(BaseURL, org_id, resource_id)
+    response = requests.get(myURL, headers=myHeader)
+    json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data) 
+    print("Transit Gateway")
+    print("===============")
+    print("    TGW_ID    : " + json_response['traits']['AwsNetworkConnectivityTrait']['l3connectors'][0]['id'])
+    print("    Region    : " + json_response['traits']['AwsNetworkConnectivityTrait']['l3connectors'][0]['location']['name'])  
+
+    print("AWS info")
+    print("========")
+    if 'AwsVpcAttachmentsTrait' in json_response['traits'] : 
+        if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'] == None:
+            print("    No AWS account attached")    
+        else:
+            print("    AWS Account  : " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['account_number'])
+            print("    RAM Share ID : " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['resource_share_name'])
+            print("    Status       : " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['state'])
+            if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['state'] == "ASSOCIATING":
+                print("        Go to AWS console/RAM and accept the share and wait for Status ASSOCIATED (5-10 mins)")
+            else:    
+                if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['attachments'] == None:
+                    print("    No VPC attached")
+                else:    
+                    for i in range(len(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['attachments'])):
+                        print("    VPC " + str(i+1) + "        :" + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['attachments'][i]["vpc_id"])
+                        print("        State         : " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['attachments'][i]["state"])
+                        print("        Attachment    : " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['attachments'][i]["attach_id"])
+                        print("        Static Routes : " + (', '.join(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['attachments'][i]["configured_prefixes"])))
+    else:
+        print("    No AWS account attached")    
+
+
+
+    print("SDDCs")
+    print("=====")    
+    if 'AwsRealizedSddcConnectivityTrait' in json_response['traits'] : 
+        if json_response['traits']['AwsRealizedSddcConnectivityTrait']['sddcs'] != []:
+            for i in range(len(json_response['traits']['AwsRealizedSddcConnectivityTrait']['sddcs'])):
+                print("    SDDC_ID " + str(i+1) + ": " + json_response['traits']['AwsRealizedSddcConnectivityTrait']['sddcs'][i]['sddc_id'])  #loop here
+        else:
+            print("    No SDDC attached")    
+      
     return  
 
 def get_resource_id(group_id, org_id, session_token):
@@ -215,7 +260,7 @@ def check_empty_group(group_id, org_id, session_token):
     myURL = "{}/inventory/{}/core/deployment-groups/{}".format(BaseURL, org_id, group_id)
     response = requests.get(myURL, headers=myHeader)
     json_response = response.json()
-    print(len(json_response['membership']['included']))
+    # print(len(json_response['membership']['included']))
     if (len(json_response['membership']['included']) != 0):
         return False
     return True   
@@ -270,13 +315,19 @@ def get_pending_att(resource_id, org_id, session_token):
     # print(pretty_data) 
     vpcs=[]
     n=1
-    for i in range(len(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'])):
-        print("Account: " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['account_number'])
-        for j in range(len(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'])):
-            if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'][int(j)]['state'] == "PENDING_ACCEPTANCE":
-                print(str(n) +": " + "VPC attachment = " + str(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'][int(j)]['attach_id']))
-                vpcs.append(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'][int(j)]['attach_id'])  
-                n=n+1  
+    if 'AwsVpcAttachmentsTrait' in json_response['traits'] : 
+        for i in range(len(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'])):
+            print("Account: " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['account_number'])
+            if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'] == None:
+                print("    No VPCs Pending Acceptance")
+            else:    
+                for j in range(len(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'])):
+                    if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'][int(j)]['state'] == "PENDING_ACCEPTANCE":
+                        print(str(n) +": " + "VPC attachment = " + str(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'][int(j)]['attach_id']))
+                        vpcs.append(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'][int(j)]['attach_id'])  
+                        n=n+1  
+    else:
+        print("No AWS account attached")                    
     return vpcs    
 
 def attach_vpc(att_id, resource_id, org_id, account, session_token):
@@ -417,7 +468,6 @@ elif intent_name == "get-group-info":
     group = input('   Select SDDC Group: ')
     group_id = get_group_id(group, org_id, session_token)
     resource_id = get_resource_id(group_id, org_id, session_token)
-
     get_group_info(group_id, resource_id, org_id, session_token)  
 
 elif intent_name == "attach-sddc":
@@ -510,13 +560,6 @@ else:
     print("    attach-vpc")
     print("    detach-vpc")
     print("    disconnect-aws\n")
-
-
-
-
-
-
-
 
 
 
