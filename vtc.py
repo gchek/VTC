@@ -31,7 +31,8 @@ API_Token       = config.get("vmcConfig", "API_Token")
 org_id          = config.get("vmcConfig", "org_id")
 aws_acc         = config.get("vmcConfig", "MyAWS")
 region          = config.get("vmcConfig", "AWS_region")
-
+dxgw_id         = config.get("vmcConfig", "DXGW_id")
+dxgw_owner      = config.get("vmcConfig", "DXGW_owner")
 
 
 
@@ -156,6 +157,15 @@ def get_group_info(group_id, resource_id, org_id, session_token):
     json_response = response.json()
     # pretty_data = json.dumps(response.json(), indent=4)
     # print(pretty_data) 
+    print("SDDCs")
+    print("=====")    
+    if 'AwsRealizedSddcConnectivityTrait' in json_response['traits'] : 
+        if json_response['traits']['AwsRealizedSddcConnectivityTrait']['sddcs'] != []:
+            for i in range(len(json_response['traits']['AwsRealizedSddcConnectivityTrait']['sddcs'])):
+                print("    SDDC_ID " + str(i+1) + ": " + json_response['traits']['AwsRealizedSddcConnectivityTrait']['sddcs'][i]['sddc_id'])  #loop here
+        else:
+            print("    No SDDC attached")  
+
     print("Transit Gateway")
     print("===============")
     print("    TGW_ID    : " + json_response['traits']['AwsNetworkConnectivityTrait']['l3connectors'][0]['id'])
@@ -184,17 +194,19 @@ def get_group_info(group_id, resource_id, org_id, session_token):
     else:
         print("    No AWS account attached")    
 
-
-
-    print("SDDCs")
-    print("=====")    
-    if 'AwsRealizedSddcConnectivityTrait' in json_response['traits'] : 
-        if json_response['traits']['AwsRealizedSddcConnectivityTrait']['sddcs'] != []:
-            for i in range(len(json_response['traits']['AwsRealizedSddcConnectivityTrait']['sddcs'])):
-                print("    SDDC_ID " + str(i+1) + ": " + json_response['traits']['AwsRealizedSddcConnectivityTrait']['sddcs'][i]['sddc_id'])  #loop here
+    print("DX Gateway")
+    print("==========")
+    if 'AwsDirectConnectGatewayAssociationsTrait' in json_response['traits'] : 
+        if not json_response['traits']['AwsDirectConnectGatewayAssociationsTrait']['direct_connect_gateway_associations']:
+            print("    No DXGW Association")
         else:
-            print("    No SDDC attached")    
-      
+            print("    DXGW ID   : " +  json_response['traits']['AwsDirectConnectGatewayAssociationsTrait']['direct_connect_gateway_associations'][0]['direct_connect_gateway_id'])
+            print("    DXGW Owner: " +  json_response['traits']['AwsDirectConnectGatewayAssociationsTrait']['direct_connect_gateway_associations'][0]['direct_connect_gateway_owner'])
+            print("    Status    : " +  json_response['traits']['AwsDirectConnectGatewayAssociationsTrait']['direct_connect_gateway_associations'][0]['state'])
+            print("    Prefixes  : " +  (', '.join(json_response['traits']['AwsDirectConnectGatewayAssociationsTrait']['direct_connect_gateway_associations'][0]['peering_regions'][0]['allowed_prefixes'])))
+
+    else:
+        print("    No DXGW Association")  
     return  
 
 def get_resource_id(group_id, org_id, session_token):
@@ -318,7 +330,7 @@ def get_pending_att(resource_id, org_id, session_token):
     if 'AwsVpcAttachmentsTrait' in json_response['traits'] : 
         for i in range(len(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'])):
             print("Account: " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['account_number'])
-            if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'] == None:
+            if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'] == None:        #'attachements' doesnt exists
                 print("    No VPCs Pending Acceptance")
             else:    
                 for j in range(len(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'])):
@@ -402,7 +414,7 @@ def detach_vpc(att_id, resource_id, org_id, account, session_token):
     # print(pretty_data)
     return task_id    
 
-def disconnect_aws_account(account, region, resource_id, org_id, session_token):
+def disconnect_aws_account(account, resource_id, org_id, session_token):
     myHeader = {'csp-auth-token': session_token}
     myURL = "{}/network/{}/aws/operations".format(BaseURL, org_id)
     body = {
@@ -422,6 +434,120 @@ def disconnect_aws_account(account, region, resource_id, org_id, session_token):
     # pretty_data = json.dumps(response.json(), indent=4)
     # print(pretty_data)
     return task_id       
+
+def add_vpc_prefixes(routes, att_id, resource_id, org_id, account, session_token):
+    myHeader = {'csp-auth-token': session_token}
+    myURL = "{}/network/{}/aws/operations".format(BaseURL, org_id)
+    body = {
+    "type": "APPLY_ATTACHMENT_ACTION",
+    "resource_id": resource_id,
+    "resource_type": "network-connectivity-config",
+    "config" : {
+        "type": "AwsApplyAttachmentActionConfig",
+        "account" : {
+            "account_number": account,
+            "attachments": [
+                    {
+                    "action": "UPDATE",
+                    "attach_id": att_id,
+                    "configured_prefixes": routes
+                    }
+                ]
+            }
+        }
+    }
+    response = requests.post(myURL, json=body, headers=myHeader)  
+    json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
+    task_id = json_response ['id']
+    return task_id    
+      
+def attach_dxgw(routes, resource_id, org_id, dxgw_owner, dxgw_id, region, session_token):
+    myHeader = {'csp-auth-token': session_token}
+    myURL = "{}/network/{}/aws/operations".format(BaseURL, org_id)
+    body = {
+        "type": "ASSOCIATE_DIRECT_CONNECT_GATEWAY",
+        "resource_id": resource_id,
+        "resource_type": "network-connectivity-config",
+   	    "config" : {
+            "type": "AwsAssociateDirectConnectGatewayConfig",
+		    "direct_connect_gateway_association": {
+			    "direct_connect_gateway_id": dxgw_id,
+			    "direct_connect_gateway_owner": dxgw_owner,
+                "peering_region_configs": [
+				    {
+					"allowed_prefixes": routes,
+                    "region": region
+				    }
+			    ]
+		    }
+        }
+    }    
+    response = requests.post(myURL, json=body, headers=myHeader)  
+    json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
+    task_id = json_response ['id']
+    return task_id  
+
+def detach_dxgw(resource_id, org_id, dxgw_id, session_token):
+    myHeader = {'csp-auth-token': session_token}
+    myURL = "{}/network/{}/aws/operations".format(BaseURL, org_id)
+    body = {
+        "type": "DISASSOCIATE_DIRECT_CONNECT_GATEWAY",
+        "resource_id": resource_id,
+        "resource_type": "network-connectivity-config",
+   	    "config" : {
+            "type": "AwsDisassociateDirectConnectGatewayConfig",
+		    "direct_connect_gateway_association": {
+			    "direct_connect_gateway_id": dxgw_id
+		    }
+        }
+    }    
+    response = requests.post(myURL, json=body, headers=myHeader)  
+    json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data)
+    task_id = json_response ['id']
+    return task_id  
+
+def get_route_tables(resource_id, org_id, session_token):
+    myHeader = {'csp-auth-token': session_token}
+    myURL = "{}/network/{}/core/network-connectivity-configs/{}/route-tables".format(BaseURL, org_id, resource_id)
+    response = requests.get(myURL, headers=myHeader)
+    json_response = response.json()
+    # pretty_data = json.dumps(response.json(), indent=4)
+    # print(pretty_data) 
+    if  not json_response['content']:       #'content' is empty []
+        print("    Routing Tables empty")
+    else:    
+        members_id = json_response['content'][0]['id']
+        external_id = json_response['content'][1]['id']
+
+        myURL = "{}/network/{}/core/network-connectivity-configs/{}/route-tables/{}/routes".format(BaseURL, org_id, resource_id, members_id)  
+        response = requests.get(myURL, headers=myHeader)
+        json_response = response.json()
+        # pretty_data = json.dumps(response.json(), indent=4)
+        # print(pretty_data) 
+        print("     Members route domain: Routes to all SDDCs, VPCs and Direct Connect Gateways")
+        for i in range(len(json_response['content'])):
+            print("\tDestination: " + json_response['content'][i]['destination'] + "\t\tTarget: " + json_response['content'][i]['target']['id'])
+
+        myURL = "{}/network/{}/core/network-connectivity-configs/{}/route-tables/{}/routes".format(BaseURL, org_id, resource_id, external_id)  
+        response = requests.get(myURL, headers=myHeader)
+        json_response = response.json()
+        # pretty_data = json.dumps(response.json(), indent=4)
+        # print(pretty_data) 
+        print("     External (VPC and Direct Connect Gateway) route domain: Routes only to member SDDCs")
+        for i in range(len(json_response['content'])):
+            print("\tDestination: " + json_response['content'][i]['destination'] + "\t\tTarget: " + json_response['content'][i]['target']['id'])
+    return
+
+
+
+
+
 
 # --------------------------------------------
 # ---------------- Main ----------------------
@@ -542,8 +668,55 @@ elif intent_name == "disconnect-aws":
     group = input('   Select SDDC Group: ')
     group_id = get_group_id(group, org_id, session_token)
     resource_id = get_resource_id(group_id, org_id, session_token)
-    task_id = disconnect_aws_account(aws_acc, region, resource_id, org_id, session_token)     
-    get_task_status(task_id, org_id, session_token)         
+    task_id = disconnect_aws_account(aws_acc, resource_id, org_id, session_token)     
+    get_task_status(task_id, org_id, session_token)   
+
+elif intent_name == "vpc-prefixes":
+    print("===== Adding/Removing VPC Static Routes =========")
+    get_sddc_groups( org_id, session_token)
+    group = input('   Select SDDC Group: ')
+    group_id = get_group_id(group, org_id, session_token)    
+    resource_id = get_resource_id(group_id, org_id, session_token)
+    vpc_list = get_available_att(resource_id, org_id, session_token)
+    if vpc_list == []:
+        print('   No VPC attached')
+    else:    
+        n = input('   Select VPC: ')
+        routes = input ('   Enter route(s) to add (space separated), or Enter to remove all: ')
+        user_list = routes.split()
+        task_id = add_vpc_prefixes(user_list, vpc_list[int(n)-1], resource_id, org_id, aws_acc, session_token)   
+        get_task_status(task_id, org_id, session_token)           
+
+
+elif intent_name == "attach-dxgw":
+    print("===== Add DXGW Association =========")
+    get_sddc_groups( org_id, session_token)
+    group = input('   Select SDDC Group: ')
+    group_id = get_group_id(group, org_id, session_token)    
+    resource_id = get_resource_id(group_id, org_id, session_token)
+    routes = input ('   Enter route(s) to add (space separated): ')
+    user_list = routes.split()
+    task_id = attach_dxgw(user_list, resource_id, org_id, dxgw_owner, dxgw_id, region, session_token)   
+    get_task_status(task_id, org_id, session_token)  
+
+elif intent_name == "detach-dxgw":
+    print("===== Remove DXGW Association =========")
+    get_sddc_groups( org_id, session_token)
+    group = input('   Select SDDC Group: ')
+    group_id = get_group_id(group, org_id, session_token)    
+    resource_id = get_resource_id(group_id, org_id, session_token)
+    task_id = detach_dxgw(resource_id, org_id, dxgw_id, session_token)   
+    get_task_status(task_id, org_id, session_token)
+
+elif intent_name == "get-routes":
+    print("===== Get TGW route tables =========")
+    get_sddc_groups( org_id, session_token)
+    group = input('   Select SDDC Group: ')
+    group_id = get_group_id(group, org_id, session_token)  
+    resource_id = get_resource_id(group_id, org_id, session_token)
+  
+    get_route_tables(resource_id, org_id, session_token)   
+    
 
 else:
     print("\nPlease give an argument like:")
@@ -557,12 +730,18 @@ else:
     print("    detach-sddc \n")
     print("AWS Operations:")
     print("    connect-aws")
+    print("    disconnect-aws\n")
+    print("VPC Operations:")
     print("    attach-vpc")
     print("    detach-vpc")
-    print("    disconnect-aws\n")
+    print("    vpc-prefixes\n")
+    print("DXGW Operations:")
+    print("    attach-dxgw")
+    print("    detach-dxgw\n")
+    print("TGW Operations:")
+    print("    get-routes\n")
 
-
-
+   
 
 
 
