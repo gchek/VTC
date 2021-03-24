@@ -174,7 +174,7 @@ def get_group_info(group_id, resource_id, org_id, session_token):
     print("AWS info")
     print("========")
     if 'AwsVpcAttachmentsTrait' in json_response['traits'] : 
-        if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'] == None:
+        if not json_response['traits']['AwsVpcAttachmentsTrait']['accounts']:
             print("    No AWS account attached")    
         else:
             print("    AWS Account  : " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['account_number'])
