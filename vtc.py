@@ -182,7 +182,9 @@ def get_group_info(group_id, resource_id, org_id, session_token):
             print("    Status       : " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['state'])
             if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['state'] == "ASSOCIATING":
                 print("        Go to AWS console/RAM and accept the share and wait for Status ASSOCIATED (5-10 mins)")
-            else:    
+            else:
+		print("VPC info")
+                print("========")
                 if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['attachments'] == None:
                     print("    No VPC attached")
                 else:    
