@@ -168,8 +168,11 @@ def get_group_info(group_id, resource_id, org_id, session_token):
 
     print("Transit Gateway")
     print("===============")
-    print("    TGW_ID    : " + json_response['traits']['AwsNetworkConnectivityTrait']['l3connectors'][0]['id'])
-    print("    Region    : " + json_response['traits']['AwsNetworkConnectivityTrait']['l3connectors'][0]['location']['name'])  
+    if 'AwsNetworkConnectivityTrait' in json_response['traits'] : 
+        print("    TGW_ID    : " + json_response['traits']['AwsNetworkConnectivityTrait']['l3connectors'][0]['id'])
+        print("    Region    : " + json_response['traits']['AwsNetworkConnectivityTrait']['l3connectors'][0]['location']['name'])  
+    else:
+        print("    No TGW")   
 
     print("AWS info")
     print("========")
