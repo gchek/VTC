@@ -172,7 +172,7 @@ def get_group_info(group_id, resource_id, org_id, session_token):
         print("    TGW_ID    : " + json_response['traits']['AwsNetworkConnectivityTrait']['l3connectors'][0]['id'])
         print("    Region    : " + json_response['traits']['AwsNetworkConnectivityTrait']['l3connectors'][0]['location']['name'])  
     else:
-        print("    No TGW")   
+        print("    No TGW")    
 
     print("AWS info")
     print("========")
@@ -185,8 +185,8 @@ def get_group_info(group_id, resource_id, org_id, session_token):
             print("    Status       : " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['state'])
             if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['state'] == "ASSOCIATING":
                 print("        Go to AWS console/RAM and accept the share and wait for Status ASSOCIATED (5-10 mins)")
-            else:
-		print("VPC info")
+            else:   
+                print("VPC info")
                 print("========")
                 if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][0]['attachments'] == None:
                     print("    No VPC attached")
@@ -336,7 +336,7 @@ def get_pending_att(resource_id, org_id, session_token):
         for i in range(len(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'])):
             print("Account: " + json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['account_number'])
             if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'] == None:        #'attachements' doesnt exists
-                print("    No VPCs Pending Acceptance")
+                print("   No VPCs Pending Acceptance")
             else:    
                 for j in range(len(json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'])):
                     if json_response['traits']['AwsVpcAttachmentsTrait']['accounts'][int(i)]['attachments'][int(j)]['state'] == "PENDING_ACCEPTANCE":
@@ -713,8 +713,8 @@ elif intent_name == "detach-dxgw":
     task_id = detach_dxgw(resource_id, org_id, dxgw_id, session_token)   
     get_task_status(task_id, org_id, session_token)
 
-elif intent_name == "get-routes":
-    print("===== Get TGW route tables =========")
+elif intent_name == "show-routes":
+    print("===== Show TGW route tables =========")
     get_sddc_groups( org_id, session_token)
     group = input('   Select SDDC Group: ')
     group_id = get_group_id(group, org_id, session_token)  
@@ -744,9 +744,12 @@ else:
     print("    attach-dxgw")
     print("    detach-dxgw\n")
     print("TGW Operations:")
-    print("    get-routes\n")
+    print("    show-routes\n")
 
-   
+    
+
+
+
 
 
 
