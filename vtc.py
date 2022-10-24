@@ -54,16 +54,27 @@ def get_task_status(task_id, org_id, session_token):
     status = json_response ['state']['name']
     print(status)
     start = time.time()
+    new_session_token = ""
     while(status != "COMPLETED"):
         sys.stdout.write(".")
         sys.stdout.flush()
         time.sleep(2)
+        elapse = time.time() - start
+        if elapse >= 1700 : # session_token is only valid for 1800 sec. Over 1700, will need a new token.
+            if not new_session_token :
+                sys.stdout.write("Generating a new session_token")
+                new_session_token = getAccessToken(refresh_Token)
+                myHeader = {'csp-auth-token': new_session_token}    #update the header with new session_token
         response = requests.get(myURL, headers=myHeader)
         json_response = response.json()
+        # pretty_data = json.dumps(response.json(), indent=4)
+        # print(pretty_data)
         status = json_response ['state']['name']
         if status == "FAILED":
             print("\nTask FAILED ")
-            print(json_response['error_message'])
+            print("error message: " + json_response['state']['error_msg'])
+            print("error code: " + json_response['state']['error_code'])
+            print("message key: " + json_response['state']['name_message']['message_key'])
             break
     elapse = time.time() - start
     minutes = elapse // 60
