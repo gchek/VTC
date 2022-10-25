@@ -915,9 +915,9 @@ else:
     print("    attach-dxgw")
     print("    detach-dxgw\n")
     print("TGW Operations:")
-    print("    show-routes\n")
-    print("    attach-tgw\n")
-    print("    detach-tgw")
+    print("    show-routes")
+    print("    attach-tgw")
+    print("    detach-tgw\n")
 
 
 
